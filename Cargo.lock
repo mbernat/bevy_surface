@@ -428,6 +428,7 @@ name = "bevy_surface"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "rand",
 ]
 
 [[package]]

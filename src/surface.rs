@@ -12,6 +12,7 @@ const TAU: f32 = 2.0 * std::f32::consts::PI;
 pub struct Surface {
     positions: Vec<Vec3>,
     normals: Vec<Vec3>,
+    uvs: Vec<[f32; 2]>,
     triangles: Vec<[u32; 3]>
 }
 
@@ -19,7 +20,9 @@ fn triangle_normal(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
     (b - a).cross(c - a)
 }
 
-pub fn parametric_surface(count: u32, f: fn(f32, f32) -> Vec3) -> Surface {
+pub fn parametric_surface<F>(count: u32, f: F) -> Surface
+where F: Fn(f32, f32) -> Vec3
+{
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
@@ -32,7 +35,7 @@ pub fn parametric_surface(count: u32, f: fn(f32, f32) -> Vec3) -> Surface {
             let y = i as f32 * delta;
             let x = j as f32 * delta;
             let o = f(x, y);
-            positions.push(o.into());
+            positions.push(o);
             let a = f(x + delta, y);
             let b = f(x, y + delta);
             let c = f(x - delta, y);
@@ -43,7 +46,7 @@ pub fn parametric_surface(count: u32, f: fn(f32, f32) -> Vec3) -> Surface {
             let norm4 = triangle_normal(o, d, a);
             let norm = (norm1 + norm2 + norm3 + norm4).normalize();
             normals.push(norm.into());
-            uvs.push([0.0, 0.0]);
+            uvs.push([x, y]);
         }
     }
 
@@ -61,6 +64,7 @@ pub fn parametric_surface(count: u32, f: fn(f32, f32) -> Vec3) -> Surface {
     Surface {
         positions,
         normals,
+        uvs,
         triangles
     }
 }
@@ -68,7 +72,6 @@ pub fn parametric_surface(count: u32, f: fn(f32, f32) -> Vec3) -> Surface {
 pub fn surface_to_solid(surface: &Surface) -> Mesh {
     let positions = surface.positions.iter().map(|p| (*p).into()).collect();
     let normals = surface.normals.iter().map(|n| (*n).into()).collect();
-    let uvs = surface.positions.iter().map(|_| [0.0, 0.0]).collect();
     let mut indices = Vec::new();
     for t in &surface.triangles {
         indices.extend_from_slice(t);
@@ -78,7 +81,7 @@ pub fn surface_to_solid(surface: &Surface) -> Mesh {
         attributes: vec![
             VertexAttribute::position(positions),
             VertexAttribute::normal(normals),
-            VertexAttribute::uv(uvs),
+            VertexAttribute::uv(surface.uvs.clone()),
         ],
         indices: Some(indices)
     }
@@ -87,7 +90,6 @@ pub fn surface_to_solid(surface: &Surface) -> Mesh {
 pub fn surface_to_wireframe(surface: &Surface) -> Mesh {
     let positions = surface.positions.iter().map(|p| (*p).into()).collect();
     let normals = surface.normals.iter().map(|n| (*n).into()).collect();
-    let uvs = surface.positions.iter().map(|_| [0.0, 0.0]).collect();
     let mut indices = Vec::new();
     for t in &surface.triangles {
         indices.extend_from_slice(&[t[0], t[1], t[1], t[2], t[2], t[0]]);
@@ -97,7 +99,25 @@ pub fn surface_to_wireframe(surface: &Surface) -> Mesh {
         attributes: vec![
             VertexAttribute::position(positions),
             VertexAttribute::normal(normals),
-            VertexAttribute::uv(uvs),
+            VertexAttribute::uv(surface.uvs.clone()),
+        ],
+        indices: Some(indices)
+    }
+}
+
+pub fn surface_to_point_cloud(surface: &Surface) -> Mesh {
+    let positions = surface.positions.iter().map(|p| (*p).into()).collect();
+    let normals = surface.normals.iter().map(|n| (*n).into()).collect();
+    let mut indices = Vec::new();
+    for t in &surface.triangles {
+        indices.extend_from_slice(&[t[0], t[1], t[2]]);
+    }
+    Mesh {
+        primitive_topology: PrimitiveTopology::PointList,
+        attributes: vec![
+            VertexAttribute::position(positions),
+            VertexAttribute::normal(normals),
+            VertexAttribute::uv(surface.uvs.clone()),
         ],
         indices: Some(indices)
     }
@@ -114,6 +134,5 @@ pub fn planar(x: f32, y: f32, f: fn(f32, f32) -> f32) -> Vec3 {
 
 pub fn torus(a: f32, b: f32, x: f32, y: f32) -> Vec3 {
     let pos = Vec3::new(a + b * f32::cos(TAU * y), 0.0, b * f32::sin(TAU * y));
-    // rotate pos around the z-axis by TAU * x
     Mat3::from_rotation_z(TAU * x) * pos
 }
