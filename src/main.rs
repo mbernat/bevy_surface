@@ -13,6 +13,7 @@ use bevy::{
 };
 use rand::*;
 
+mod sphere;
 mod surface;
 use surface::*;
 
@@ -29,7 +30,7 @@ fn main() {
         .init_resource::<KeyboardState>()
         .add_system(mouse_system.system())
         .add_system(keyboard_system.system())
-        //.add_system(mesh_system.system())
+        .add_system(mesh_system.system())
         .run();
 }
 
@@ -81,10 +82,11 @@ fn mesh_system(
     mut query: Query<&Handle<Mesh>>
 ) {
     let mut rng = rand::thread_rng();
-    let a = rng.gen_range(0.99, 1.01);
-    let b = rng.gen_range(0.39, 0.41);
-    let torus = |x, y| torus(a, b, x , y);
-    let surface = parametric_surface(100, torus);
+    let a = rng.gen_range(0.0, 1.0);
+    let b= rng.gen_range(0.0, 1.0);
+    let shifter = |z| shift(Vec2::new(a, b), z);
+    let torus = |z| torus(1.0, 0.4, z);
+    let surface = parametric_surface(100, torus, shifter);
     let solid_mesh = surface_to_solid(&surface);
     for handle in &mut query.iter() {
         if let Some(mesh) = meshes.get_mut(handle) {
@@ -105,13 +107,14 @@ fn setup(
         .load_sync(&mut textures, "assets/rainbow2.png")
         .unwrap();
 
-    let _planar_wave = |x, y| planar(x, y, wave);
-    let torus = |x, y| torus(1.0, 0.4, x , y);
-    let surface = parametric_surface(200, torus);
+    let _planar_wave = |z| planar(z, wave);
+    let torus = |z| torus(1.0, 0.4, z);
+    let constant_halfs = |z| constant(Vec2::new(0.5, 0.5), z);
+    let surface = parametric_surface(200, torus, constant_halfs);
 
     let solid_mesh = meshes.add(surface_to_solid(&surface));
     let solid_material = materials.add(texture_handle.into());
-    let _solid = PbrComponents {
+    let solid = PbrComponents {
         mesh: solid_mesh,
         material: solid_material,
         translation: Translation::new(0.5, 0.5, 0.0),
@@ -139,9 +142,9 @@ fn setup(
     let camera_pos = Vec3::new(0., 0., 4.);
 
     commands
-        //.spawn(solid)
+        .spawn(solid)
         //.spawn(wireframe)
-        .spawn(point_cloud)
+        //.spawn(point_cloud)
         .spawn(Camera3dComponents {
             translation: Translation(camera_pos),
             transform: Transform::new_sync_disabled(Mat4::face_toward(

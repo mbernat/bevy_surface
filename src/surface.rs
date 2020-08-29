@@ -20,8 +20,10 @@ fn triangle_normal(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
     (b - a).cross(c - a)
 }
 
-pub fn parametric_surface<F>(count: u32, f: F) -> Surface
-where F: Fn(f32, f32) -> Vec3
+pub fn parametric_surface<F, G>(count: u32, f: F, g: G) -> Surface
+where
+    F: Fn(Vec2) -> Vec3,
+    G: Fn(Vec2) -> Vec2
 {
     let mut positions = Vec::new();
     let mut normals = Vec::new();
@@ -34,19 +36,22 @@ where F: Fn(f32, f32) -> Vec3
         for j in 0..=count {
             let y = i as f32 * delta;
             let x = j as f32 * delta;
-            let o = f(x, y);
+            let z = Vec2::new(x, y);
+            let x_delta = Vec2::new(delta, 0.0);
+            let y_delta = Vec2::new(0.0, delta);
+            let o = f(z);
             positions.push(o);
-            let a = f(x + delta, y);
-            let b = f(x, y + delta);
-            let c = f(x - delta, y);
-            let d = f(x, y - delta);
+            let a = f(z + x_delta);
+            let b = f(z + y_delta);
+            let c = f(z - x_delta);
+            let d = f(z - y_delta);
             let norm1 = triangle_normal(o, a, b);
             let norm2 = triangle_normal(o, b, c);
             let norm3 = triangle_normal(o, c, d);
             let norm4 = triangle_normal(o, d, a);
             let norm = (norm1 + norm2 + norm3 + norm4).normalize();
             normals.push(norm.into());
-            uvs.push([x, y]);
+            uvs.push(g(z).into());
         }
     }
 
@@ -124,15 +129,22 @@ pub fn surface_to_point_cloud(surface: &Surface) -> Mesh {
 }
 
 // Concrete surfaces
-pub fn wave(x: f32, y: f32) -> f32 {
-    0.5 * f32::sin(TAU * x) * f32::sin(TAU * y)
+pub fn wave(z: Vec2) -> f32 {
+    0.5 * f32::sin(TAU * z[0]) * f32::sin(TAU * z[1])
 }
 
-pub fn planar(x: f32, y: f32, f: fn(f32, f32) -> f32) -> Vec3 {
-    [x, y, f(x, y)].into()
+pub fn planar(z: Vec2, f: fn(Vec2) -> f32) -> Vec3 {
+    z.extend(f(z))
 }
 
-pub fn torus(a: f32, b: f32, x: f32, y: f32) -> Vec3 {
-    let pos = Vec3::new(a + b * f32::cos(TAU * y), 0.0, b * f32::sin(TAU * y));
-    Mat3::from_rotation_z(TAU * x) * pos
+pub fn torus(a: f32, b: f32, z: Vec2) -> Vec3 {
+    let pos = Vec3::new(a + b * f32::cos(TAU * z[1]), 0.0, b * f32::sin(TAU * z[1]));
+    Mat3::from_rotation_z(TAU * z[0]) * pos
 }
+
+// Functions
+pub fn constant(c: Vec2, _z: Vec2) -> Vec2 { c }
+
+pub fn identity(z: Vec2) -> Vec2 { z }
+
+pub fn shift(c: Vec2, z: Vec2) -> Vec2 { Vec2::new((c.x() + z.x()) % 1.0, (c.y() + z.y()) % 1.0) }
