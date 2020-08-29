@@ -6,16 +6,23 @@ use bevy::{
     },
     math::*,
     prelude::*,
-    render::camera::*,
+    render::{
+        camera::*,
+        pass::ClearColor
+    }
 };
 use rand::*;
 
 mod surface;
 use surface::*;
 
-/// This example illustrates how to create a mesh asset with a custom vertex format and a shader that uses that mesh
 fn main() {
     App::build()
+        .add_resource(WindowDescriptor {
+            title: "Bevy Surface".to_string(),
+            ..Default::default()
+        })
+        .add_resource(ClearColor(Color::rgb(0.15, 0.1, 0.5)))
         .add_default_plugins()
         .add_startup_system(setup.system())
         .init_resource::<MouseState>()
@@ -100,7 +107,7 @@ fn setup(
 
     let _planar_wave = |x, y| planar(x, y, wave);
     let torus = |x, y| torus(1.0, 0.4, x , y);
-    let surface = parametric_surface(100, torus);
+    let surface = parametric_surface(200, torus);
 
     let solid_mesh = meshes.add(surface_to_solid(&surface));
     let solid_material = materials.add(texture_handle.into());
@@ -121,7 +128,7 @@ fn setup(
     };
 
     let point_cloud_mesh = meshes.add(surface_to_point_cloud(&surface));
-    let point_cloud_material = materials.add(Color::BLUE.into());
+    let point_cloud_material = materials.add(texture_handle.into());
     let point_cloud = PbrComponents {
         mesh: point_cloud_mesh,
         material: point_cloud_material,
