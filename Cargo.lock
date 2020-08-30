@@ -428,7 +428,7 @@ name = "bevy_surface"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "rand",
+ "num-complex",
 ]
 
 [[package]]
@@ -1753,6 +1753,15 @@ dependencies = [
  "mio-extras",
  "walkdir",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b05ad05bd8977050b171b3f6b48175fea6e0565b7981059b486075e1026a9fb5"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

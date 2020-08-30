@@ -11,10 +11,10 @@ use bevy::{
         pass::ClearColor
     }
 };
-use rand::*;
 
 mod sphere;
 mod surface;
+
 use surface::*;
 
 fn main() {
@@ -26,21 +26,73 @@ fn main() {
         .add_resource(ClearColor(Color::rgb(0.15, 0.1, 0.5)))
         .add_default_plugins()
         .add_startup_system(setup.system())
-        .init_resource::<MouseState>()
+        .init_resource::<CursorState>()
+        .init_resource::<MouseClickState>()
+        .init_resource::<MouseMotionState>()
         .init_resource::<KeyboardState>()
-        .add_system(mouse_system.system())
+        .add_system(mouse_motion_system.system())
         .add_system(keyboard_system.system())
+        .add_system(cursor_system.system())
+        .add_system(mouse_click_system.system())
         .add_system(mesh_system.system())
         .run();
 }
 
 #[derive(Default)]
-struct MouseState {
+struct MouseClickState {
+    reader: EventReader<MouseButtonInput>
+}
+
+fn mouse_click_system(
+    mut state: ResMut<MouseClickState>,
+    events: Res<Events<MouseButtonInput>>,
+    cursor: Res<CursorState>,
+    mut query: Query<&mut Mero>
+) {
+    let real_pos = cursor.position / 500. - Vec2::new(1.0, 1.0);
+    for event in state.reader.iter(&events) {
+        for mut mero in &mut query.iter() {
+            if event.state == ElementState::Released {
+                match event.button {
+                    MouseButton::Left => {
+                        println!("Adding a zero at position: {}", real_pos);
+                        let z = to_complex(real_pos);
+                        mero.zeros.push(z);
+                    }
+                    MouseButton::Right => {
+                        println!("Adding a pole at position: {}", real_pos);
+                        let z = to_complex(real_pos);
+                        mero.poles.push(z);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct CursorState {
+    reader: EventReader<CursorMoved>,
+    position: Vec2
+}
+
+fn cursor_system(
+    mut state: ResMut<CursorState>,
+    events: Res<Events<CursorMoved>>
+) {
+    for event in state.reader.iter(&events) {
+        state.position = event.position
+    }
+}
+
+#[derive(Default)]
+struct MouseMotionState {
     reader: EventReader<MouseMotion>
 }
 
-fn mouse_system(
-    mut state: ResMut<MouseState>,
+fn mouse_motion_system(
+    mut state: ResMut<MouseMotionState>,
     events: Res<Events<MouseMotion>>,
     mut query: Query<(&Camera, &mut Translation, &mut Transform)>
 ) {
@@ -79,19 +131,15 @@ fn keyboard_system(
 
 fn mesh_system(
     mut meshes: ResMut<Assets<Mesh>>,
-    mut query: Query<&Handle<Mesh>>
+    mut query: Query<(Changed<Mero>, &Surface, &Handle<Mesh>)>
 ) {
-    let mut rng = rand::thread_rng();
-    let a = rng.gen_range(0.0, 1.0);
-    let b= rng.gen_range(0.0, 1.0);
-    let shifter = |z| shift(Vec2::new(a, b), z);
-    let torus = |z| torus(1.0, 0.4, z);
-    let surface = parametric_surface(100, torus, shifter);
-    let solid_mesh = surface_to_solid(&surface);
-    for handle in &mut query.iter() {
+    for (mero, surface, handle) in &mut query.iter() {
         if let Some(mesh) = meshes.get_mut(handle) {
+            println!("Updating mesh");
+            let pol = |z| poly(&mero, z);
+            // TODO: do not recreate the mesh, only update the uvs
+            let solid_mesh = surface_to_solid(&surface, pol);
             *mesh = solid_mesh;
-            break
         }
     }
 }
@@ -104,47 +152,42 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>
 ) {
     let texture_handle = asset_server
-        .load_sync(&mut textures, "assets/rainbow2.png")
+        .load_sync(&mut textures, "assets/periodic.png")
         .unwrap();
 
-    let _planar_wave = |z| planar(z, wave);
-    let torus = |z| torus(1.0, 0.4, z);
-    let constant_halfs = |z| constant(Vec2::new(0.5, 0.5), z);
-    let surface = parametric_surface(200, torus, constant_halfs);
+    let pol = |z| poly(&Mero::new(), z);
+    let bound = Vec2::new(2., 2.);
+    let plane_surface = parametric_surface(-bound, bound, [200, 200], plane);
 
-    let solid_mesh = meshes.add(surface_to_solid(&surface));
+    let solid_mesh = meshes.add(surface_to_solid(&plane_surface, pol));
     let solid_material = materials.add(texture_handle.into());
-    let solid = PbrComponents {
+    let solid_plane = PbrComponents {
         mesh: solid_mesh,
         material: solid_material,
-        translation: Translation::new(0.5, 0.5, 0.0),
+        translation: Translation::new(-2.0, 0.5, 0.0),
         ..Default::default()
     };
 
-    let wireframe_mesh = meshes.add(surface_to_wireframe(&surface));
-    let wireframe_material = materials.add(Color::BLACK.into());
-    let _wireframe = PbrComponents {
-        mesh: wireframe_mesh,
-        material: wireframe_material,
-        translation: Translation::new(0.5, 0.5, 0.0),
+    let sphere_surface = parametric_surface(-bound, bound, [200, 200], sphere::north_chart);
+
+    let solid_mesh = meshes.add(surface_to_solid(&sphere_surface, pol));
+    let solid_material = materials.add(texture_handle.into());
+    let solid_sphere = PbrComponents {
+        mesh: solid_mesh,
+        material: solid_material,
+        translation: Translation::new(4.0, 0.5, 0.0),
         ..Default::default()
     };
 
-    let point_cloud_mesh = meshes.add(surface_to_point_cloud(&surface));
-    let point_cloud_material = materials.add(texture_handle.into());
-    let point_cloud = PbrComponents {
-        mesh: point_cloud_mesh,
-        material: point_cloud_material,
-        translation: Translation::new(0.5, 0.5, 0.0),
-        ..Default::default()
-    };
-
-    let camera_pos = Vec3::new(0., 0., 4.);
+    let camera_pos = Vec3::new(0., 0., 10.);
 
     commands
-        .spawn(solid)
-        //.spawn(wireframe)
-        //.spawn(point_cloud)
+        .spawn(solid_plane)
+        .with(plane_surface)
+        .with(Mero::new())
+        .spawn(solid_sphere)
+        .with(sphere_surface)
+        .with(Mero::new())
         .spawn(Camera3dComponents {
             translation: Translation(camera_pos),
             transform: Transform::new_sync_disabled(Mat4::face_toward(
@@ -155,7 +198,7 @@ fn setup(
             ..Default::default()
         })
         .spawn(LightComponents {
-            translation: Translation::new(2.0, 2.0, 2.0),
+            translation: Translation::new(2.0, 2.0, 4.0),
             ..Default::default()
         })
         ;
